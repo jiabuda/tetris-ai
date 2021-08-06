@@ -536,8 +536,7 @@
             //在这里可以触发AI计算
             // let intelligence = new global.Intelligence()
             //获取棋盘、方块
-            console.log(this.brickCount)
-            window.ai.calc(this.grids, this.shapeIndex, this.stateIndex)
+            window.ai.calc(this.grids, this.brickCount - 1)
             // let {bestC, bestS} = intelligence.calc(this.grids, this.shapeIndex, this.stateIndex)
             // intelligence.calc(this.grids, this.shapeIndex, this.stateIndex)
 

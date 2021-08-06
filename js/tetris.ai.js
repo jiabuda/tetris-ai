@@ -1,45 +1,185 @@
 ((global) => {
     const {shapes, gridConfig} = global.config;
 
+    // 随机数生成函数的配置
+    const randomConfig = {
+        a: 27073, // 乘子
+        M: 32749, // 模数
+        C: 17713, // 增量
+        v: 12358, // 随机数种子
+    };
+
+    const getRandomNum = (v) => {
+        const {a, C, M} = randomConfig; // a：乘子，C：模数、C：增量
+        return (v * a + C) % M;
+    }
+
+    const initRandomNum = randomConfig.v
+
+    const getIndex = (brickCount) => {
+
+        let randomNum = initRandomNum
+        for (let i = 0; i <= brickCount; i++) {
+            randomNum = getRandomNum(randomNum)
+        }
+        const weightIndex = randomNum % 29; // 对形状的概率有一定要求：限制每种砖块的出现概率可以让游戏变得更有挑战性
+        const stateIndex = brickCount % shapes[0].length; // 形态概率要求不高，随机即可
+        let shapeIndex = 0
+        if (weightIndex >= 0 && weightIndex <= 1) {
+            shapeIndex = 0
+        } else if (weightIndex > 1 && weightIndex <= 4) {
+            shapeIndex = 1
+        } else if (weightIndex > 4 && weightIndex <= 7) {
+            shapeIndex = 2
+        } else if (weightIndex > 7 && weightIndex <= 11) {
+            shapeIndex = 3
+        } else if (weightIndex > 11 && weightIndex <= 16) {
+            shapeIndex = 4
+        } else if (weightIndex > 16 && weightIndex <= 22) {
+            shapeIndex = 5
+        } else if (weightIndex > 22) {
+            shapeIndex = 6
+        }
+        return {shapeIndex, stateIndex}
+    }
+
+    const cloneGrid = (oldGrid) => {
+        let newGrid = []
+        oldGrid.forEach(row => {
+            newGrid.push(row.slice(0))
+        })
+        return newGrid
+    }
+
+    //下落并返回一个最终形态
+    const drop = (grid, columnIndex, shapeIndex, stateIndex) => {
+        let latestGrid = null
+        let landHeight = gridConfig.row
+        for (let r = 0; r < gridConfig.row; r++) {
+            let emptyCount = 0, invalidCount = 0, tempGrid = cloneGrid(grid)
+            shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
+                if (y + r >= 0 && y + r < gridConfig.row) {
+                    if (!tempGrid[y + r][x + columnIndex]) {
+                        emptyCount++
+                    }
+                } else {
+                    invalidCount++
+                }
+            })
+
+            if (invalidCount === 0) {
+                if (emptyCount === 4) {
+                    //可以放下
+                    latestGrid = cloneGrid(grid)
+                    let minY = 999, maxY = -999
+                    shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
+                        if (latestGrid[y + r]) {
+                            latestGrid[y + r][x + columnIndex] = true
+                        }
+
+                        if (y < minY) {
+                            minY = y
+                        }
+                        if (y > maxY) {
+                            maxY = y
+                        }
+                    })
+
+                    landHeight = (gridConfig.row - 1 - r) + maxY - (maxY - minY + 1) / 2
+                } else {
+                    //搜寻结束
+                    break
+                }
+            }
+        }
+        return {latestGrid, landHeight}
+    }
+    //检验这一列能否容下这个方块
+    const posValid = (columnIndex, shapeIndex, stateIndex) => {
+        let result = true
+        shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
+            if (x + columnIndex < 0 || x + columnIndex >= gridConfig.col) {
+                result = false
+            }
+        })
+        return result
+    }
+
+    //生成摆放方块后的网格图
+    const generateGrids = (initGrid, shapeIndex, stateIndex) => {
+        let grids = []
+        //遍历列
+        for (let c = 0; c < gridConfig.col; c++) {
+            //遍历形态
+            // marks[c] = []
+            for (let s = 0; s < shapes[shapeIndex].length; s++) {
+                // console.log(c, s)
+                if (posValid(c, shapeIndex, (stateIndex + s) % 4)) {
+                    let {
+                        latestGrid: dropGrid,
+                        landHeight
+                    } = drop(initGrid, c, shapeIndex, (stateIndex + s) % 4)
+
+                    // this.printGrid(dropGrid)
+                    //对方格进行分析
+                    // let currentMark = this.analyseGrid(dropGrid, landHeight)
+                    // console.log(currentMark)
+                    // if (currentMark > maxMark) {
+                    //     maxMark = currentMark
+                    //     bestGrid = this.cloneGrid(dropGrid)
+                    //     bestC = c
+                    //     bestS = s
+                    // }
+                    grids[s * 10 + c] = {dropGrid, landHeight}
+                } else {
+                    grids[s * 10 + c] = undefined
+                }
+            }
+        }
+        return grids
+    }
+
     class Intelligence {
-        currentGrid = null
 
-        calc = (grid, shapeIndex, stateIndex) => {
+        calc = (grid, brickCount) => {
+
+            let {shapeIndex, stateIndex} = getIndex(brickCount)
+            let {shapeIndex: shapeIndex2, stateIndex: stateIndex2} = getIndex(brickCount + 1)
             //将gird转成true/false形式
-            this.currentGrid = this.getBooleanGrid(grid)
+            let booleanGrid = this.getBooleanGrid(grid)
 
-            // console.log(this.currentGrid, shapeIndex)
 
-            let marks = []
+            // let marks = []
             let maxMark = -999999
-            let bestGrid = null
+            // let bestGrid = null
             let bestC = null
             let bestS = null
-            //遍历列
-            for (let c = 0; c < gridConfig.col; c++) {
-                //遍历形态
-                marks[c] = []
-                for (let s = 0; s < shapes[shapeIndex].length; s++) {
-                    // console.log(c, s)
-                    if (this.posValid(c, shapeIndex, (stateIndex + s) % 4)) {
-                        let {
-                            latestGrid: dropGrid,
-                            landHeight
-                        } = this.drop(this.currentGrid, c, shapeIndex, (stateIndex + s) % 4)
+            //得到40个网格
+            let oneStepGrid = generateGrids(booleanGrid, shapeIndex, stateIndex)
 
-                        // this.printGrid(dropGrid)
-                        //对方格进行分析
-                        let currentMark = this.analyseGrid(dropGrid, landHeight, shapeIndex)
-                        // console.log(currentMark)
-                        if (currentMark > maxMark) {
-                            maxMark = currentMark
-                            bestGrid = this.cloneGrid(dropGrid)
-                            bestC = c
-                            bestS = s
+            for (let index in oneStepGrid) {
+                if (oneStepGrid[index]) {
+                    //又得到40个网格
+                    let twoStepGrid = generateGrids(oneStepGrid[index].dropGrid, shapeIndex2, stateIndex2)
+
+                    for (let index2 in twoStepGrid) {
+                        if (twoStepGrid[index2]) {
+                            let mark = this.analyseGrid(twoStepGrid[index2].dropGrid, twoStepGrid[index2].landHeight)
+                            if (mark > maxMark) {
+                                maxMark = mark
+                                bestS = index / 10 | 0
+                                bestC = index % 10
+                            }
                         }
+
                     }
                 }
             }
+
+            // console.log(this.currentGrid, shapeIndex)
+            console.log(brickCount)
+
+
             // this.printGrid(bestGrid)
 
             let game = window.game
@@ -66,8 +206,9 @@
 
         wellSum = depth => (1 + depth) * depth / 2
 
+        fullRowSum = fullRouCount => (1 + fullRouCount) * fullRouCount / 2
 
-        analyseGrid = (grid, landHeight, shapeIndex) => {
+        analyseGrid = (grid, landHeight) => {
             let wellSums = 0
             let rowTransitionCount = 0
             let fullRowList = []
@@ -158,6 +299,7 @@
 
 
             let fullRowCount = fullRowList.length
+            let fullRowSum = this.fullRowSum(fullRowCount)
             //消除满行
             if (fullRowCount > 0) {
                 //消除行
@@ -246,6 +388,42 @@
             //     numberOfHoles * -5 +
             //     wellSums * -2
 
+            if (numberOfTilesBeforeEliminate <= 65) {
+                return numberOfTilesBeforeEliminate * 20 +
+                    landHeight * -10 +
+                    fullRowCount * -15 +
+                    rowTransitionCount * -5 +
+                    columnTransitionCount * -5 +
+                    numberOfHoles * -5 +
+                    wellSums * -8
+            }
+
+            if (numberOfTilesBeforeEliminate > 65 && numberOfTilesBeforeEliminate <= 100) {
+                return numberOfTilesBeforeEliminate * -3 +
+                    landHeight * -5 +
+                    fullRowCount * 10 +
+                    rowTransitionCount * -8 +
+                    columnTransitionCount * -8 +
+                    numberOfHoles * -5 +
+                    wellSums * -5
+            }
+
+            if (numberOfTilesBeforeEliminate > 100) {
+                return numberOfTilesBeforeEliminate * -8 +
+                    fullRowCount * 8 +
+                    rowTransitionCount * -4 +
+                    columnTransitionCount * -4 +
+                    numberOfHoles * -8 +
+                    wellSums * -8
+            }
+
+            return numberOfTilesBeforeEliminate * -2 +
+                fullRowCount * 3 +
+                rowTransitionCount * -3 +
+                columnTransitionCount * -3 +
+                numberOfHoles * -3 +
+                wellSums * -3
+
             // if (shapeIndex === 0 || shapeIndex === 1|| shapeIndex === 2) {
             //     return landHeight * -6 +
             //         fullRowCount * 2 +
@@ -265,12 +443,12 @@
             //         wellSums * -5
             // }
 
-            return landHeight * -6 +
-                fullRowCount * 2 +
-                rowTransitionCount * -4 +
-                columnTransitionCount * -9 +
-                numberOfHoles * -5 +
-                wellSums * -2
+            // return landHeight * -6 +
+            //     fullRowSum * 2 +
+            //     rowTransitionCount * -4 +
+            //     columnTransitionCount * -9 +
+            //     numberOfHoles * -5 +
+            //     wellSums * -2
 
 
             // if(numberOfTilesBeforeEliminate>100){
@@ -298,59 +476,6 @@
             //     columnTransitionCount
         }
 
-        //检验这一列能否容下这个方块
-        posValid = (columnIndex, shapeIndex, stateIndex) => {
-            let result = true
-            shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
-                if (x + columnIndex < 0 || x + columnIndex >= gridConfig.col) {
-                    result = false
-                }
-            })
-            return result
-        }
-        //下落并返回一个最终形态
-        drop = (grid, columnIndex, shapeIndex, stateIndex) => {
-            let latestGrid = null
-            let landHeight = gridConfig.row
-            for (let r = 0; r < gridConfig.row; r++) {
-                let emptyCount = 0, invalidCount = 0, tempGrid = this.cloneGrid(grid)
-                shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
-                    if (y + r >= 0 && y + r < gridConfig.row) {
-                        if (!tempGrid[y + r][x + columnIndex]) {
-                            emptyCount++
-                        }
-                    } else {
-                        invalidCount++
-                    }
-                })
-
-                if (invalidCount === 0) {
-                    if (emptyCount === 4) {
-                        //可以放下
-                        latestGrid = this.cloneGrid(grid)
-                        let minY = 999, maxY = -999
-                        shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
-                            if (latestGrid[y + r]) {
-                                latestGrid[y + r][x + columnIndex] = true
-                            }
-
-                            if (y < minY) {
-                                minY = y
-                            }
-                            if (y > maxY) {
-                                maxY = y
-                            }
-                        })
-
-                        landHeight = (gridConfig.row - 1 - r) + maxY - (maxY - minY + 1) / 2
-                    } else {
-                        //搜寻结束
-                        break
-                    }
-                }
-            }
-            return {latestGrid, landHeight}
-        }
 
         getBooleanGrid = (oldGrid) => {
             let newGrid = []
@@ -363,13 +488,7 @@
             })
             return newGrid
         }
-        cloneGrid = (oldGrid) => {
-            let newGrid = []
-            oldGrid.forEach(row => {
-                newGrid.push(row.slice(0))
-            })
-            return newGrid
-        }
+
         printGrid = (grid) => {
             let str = ""
             grid.forEach(row => {
