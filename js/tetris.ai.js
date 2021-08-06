@@ -1,50 +1,303 @@
-/*
- * @Author: geek
- * @LastEditors: geek
- * @Description: 【俄罗斯方块游戏主文件】依赖 tetris.core
- * @Src: https://geek.qq.com/tetris/js/tetris.game.js (编译前的源文件)
- *
- * 游戏介绍：
- * 1、将 10000 块按固定顺序出现的方块堆叠，有消除行即得分，看谁得分高
- * 2、游戏分正式模式和回放模式，正式模式用于 PK 打榜，回放模式（playRecord）目前仅提供用于 debug 操作记录和对应的分数（暂未开放使用）
- * 3、方块下落速度会随着出现的方块数量加快，每 100 个方块后，速度递减 100ms，原始速度 1000ms，最快 100ms
- * 4、画布垂直方向满屏后，结束游戏
- * 5、方块出现的总数最大为 10000 个，超过后结束游戏
- * 6、每个方块的类型（已有：I,L,J,T,O,S,Z 型方块）、形态（各类型每旋转90度后的形态）会从配置中按照统一顺序、限定概率地读取出来，保证所有人遇到的方块顺序和方块概率都一致
- * 7、积分规则：当前方块的消除得分 = 画布中已有的格子数 * 当前方块落定后所消除行数的系数，每消除 1、2、3、4 行的得分系数依次为：1、3、6、10（例：画布当前一共有 n 个格子，当前消除行数为2，则得分为：n * 3）
- * 8、游戏结束触发规则：1)、方块落定后触顶；2)、新建方块无法放置（画布上用于放置方块的格子中有已被占用的）
- *
- * 注：游戏中优先判定是否结束游戏再计分。如：极限情况下，当前方块落定后产生了可消除行，但触顶或者超过最大方块数了，此轮不计分，直接结束游戏
- * 注：游戏使用的坐标系为 canvas 坐标系（坐标原点在左上角）详见：https://developer.mozilla.org/zh-CN/docs/Web/API/Canvas_API/Tutorial/Drawing_shapes
- *
- */
 ((global) => {
     const {shapes, gridConfig} = global.config;
 
     class Intelligence {
         currentGrid = null
 
-        calc = (grid, shapeIndex) => {
+        calc = (grid, shapeIndex, stateIndex) => {
             //将gird转成true/false形式
             this.currentGrid = this.getBooleanGrid(grid)
 
             // console.log(this.currentGrid, shapeIndex)
 
             let marks = []
+            let maxMark = -999999
+            let bestGrid = null
+            let bestC = null
+            let bestS = null
             //遍历列
             for (let c = 0; c < gridConfig.col; c++) {
                 //遍历形态
                 marks[c] = []
                 for (let s = 0; s < shapes[shapeIndex].length; s++) {
                     // console.log(c, s)
-                    if (this.posValid(c, shapeIndex, s)) {
-                        let dropGrid = this.drop(this.currentGrid, c, shapeIndex, s)
-                        this.printGrid(dropGrid)
+                    if (this.posValid(c, shapeIndex, (stateIndex + s) % 4)) {
+                        let {
+                            latestGrid: dropGrid,
+                            landHeight
+                        } = this.drop(this.currentGrid, c, shapeIndex, (stateIndex + s) % 4)
+
+                        // this.printGrid(dropGrid)
+                        //对方格进行分析
+                        let currentMark = this.analyseGrid(dropGrid, landHeight, shapeIndex)
+                        // console.log(currentMark)
+                        if (currentMark > maxMark) {
+                            maxMark = currentMark
+                            bestGrid = this.cloneGrid(dropGrid)
+                            bestC = c
+                            bestS = s
+                        }
                     }
                 }
             }
+            // this.printGrid(bestGrid)
 
+            let game = window.game
+            //300毫秒后自动操作
+            setTimeout(() => {
+                for (let i = 0; i < bestS; i++) {
+                    game.tetris.rotate()
+                    game.render()
+                }
+                if (bestC > 4) {
+                    game.playStep('right', bestC - 4)
+                }
+                if (bestC < 4) {
+                    game.playStep('left', 4 - bestC)
+                }
+                game.tetris.drop();
+                game.playStep('down', 1);
+                game.opts.onDrop();
+            }, 1)
+
+
+            // return {bestC, bestS}
         }
+
+        wellSum = depth => (1 + depth) * depth / 2
+
+
+        analyseGrid = (grid, landHeight, shapeIndex) => {
+            let wellSums = 0
+            let rowTransitionCount = 0
+            let fullRowList = []
+            let numberOfTilesBeforeEliminate = 0
+            //井数
+            //消行数
+            //行变换
+            let wellMap = []
+            for (let r = 0; r < gridConfig.row; r++) {
+                wellMap.push(new Array(gridConfig.col).fill(false))
+            }
+
+            for (let r = 0; r < gridConfig.row; r++) {
+                let rowTransitionStatus = true
+                let isRowFull = true
+                let isRowHasTile = false
+
+                let currentRowTransitionCount = 0
+                for (let c = 0; c < gridConfig.col; c++) {
+                    if (grid[r][c] !== rowTransitionStatus) {
+                        //产生跳变，转换加1
+                        rowTransitionStatus = !rowTransitionStatus
+                        currentRowTransitionCount++
+                    }
+                    //是否满行
+                    isRowFull = isRowFull && grid[r][c]
+                    //是否空行
+                    isRowHasTile = isRowHasTile || grid[r][c]
+
+
+                    if (grid[r][c]) {
+                        //方块数加1
+                        numberOfTilesBeforeEliminate++
+                    }
+
+                    if (c === 0 && !grid[r][c] && grid[r][c + 1]) {
+                        //是一个井
+                        wellMap[r][c] = true
+                    }
+
+                    if (c === gridConfig.col - 1 && !grid[r][c] && grid[r][c - 1]) {
+                        wellMap[r][c] = true
+                    }
+
+                    if (!grid[r][c] && grid[r][c + 1] && grid[r][c - 1]) {
+                        wellMap[r][c] = true
+                    }
+                }
+
+                if (isRowFull) {
+                    fullRowList.push(r)
+                }
+                if (!rowTransitionStatus) {
+                    currentRowTransitionCount++
+                }
+                if (isRowHasTile) {
+                    rowTransitionCount += currentRowTransitionCount
+                }
+            }
+
+            //遍历rowMap
+            for (let c = 0; c < gridConfig.col; c++) {
+                let wellDep = 0, touchWell = false
+                for (let r = 0; r < gridConfig.row; r++) {
+                    if (wellMap[r][c]) {
+                        wellDep++
+                        if (touchWell) {
+                            //已经再井里遍历
+                        } else {
+                            //井发现
+                            touchWell = true
+                        }
+                    } else {
+                        if (touchWell) {
+                            //井结束
+                            touchWell = false
+                            wellSums += this.wellSum(wellDep)
+                        } else {
+                            //什么都不做
+                        }
+                    }
+                }
+                //最后一行都有井
+                if (touchWell) {
+                    wellSums += this.wellSum(wellDep)
+                }
+            }
+
+
+            let fullRowCount = fullRowList.length
+            //消除满行
+            if (fullRowCount > 0) {
+                //消除行
+                fullRowList.forEach(index => {
+                    grid.splice(index, 1)
+                    grid.unshift(new Array(gridConfig.col).fill(false))
+                })
+            }
+
+            //统计消除后的列系数
+            // let lineHeight = 0
+            let columnTransitionCount = 0
+            let numberOfHoles = 0
+            //行高
+            //列变换
+            //空洞数
+            for (let c = 0; c < gridConfig.col; c++) {
+                let touchTop = false
+                let isColumnHasTile = false
+                let columnTransitionStatus = true//默认边界算作有方块
+                let currentColumnTransitionCount = 0
+                for (let r = 0; r < gridConfig.row; r++) {
+                    if (grid[r][c] && !touchTop) {
+                        touchTop = true
+                        //取得行高
+                        // lineHeight += (gridConfig.row - r)
+                    }
+
+                    //是否空行
+                    isColumnHasTile = isColumnHasTile || grid[r][c]
+
+
+                    if (touchTop && !grid[r][c]) {
+                        //空洞数加1
+                        numberOfHoles++
+                    }
+
+                    if (grid[r][c] !== columnTransitionStatus) {
+                        //产生跳变，转换加1
+                        columnTransitionStatus = !columnTransitionStatus
+                        currentColumnTransitionCount++
+                    }
+                }
+
+                //默认边界算作有方块,所以如果最后一次是false就加1
+                if (!columnTransitionStatus) {
+                    currentColumnTransitionCount++
+                }
+                if (isColumnHasTile) {
+                    columnTransitionCount += currentColumnTransitionCount
+                }
+            }
+
+            //console.log(numberOfTilesBeforeEliminate,landHeight, fullRowCount, rowTransitionCount, columnTransitionCount, numberOfHoles, wellSums)
+
+            // return landHeight * -4.500158825082766 +
+            //     fullRowCount * 3.4181268101392694 +
+            //     rowTransitionCount * -3.2178882868487753 +
+            //     columnTransitionCount * -9.348695305445199 +
+            //     numberOfHoles * -7.899265427351652 +
+            //     wellSums * -3.3855972247263626
+
+
+            // if(numberOfTilesBeforeEliminate>80){
+            //     return landHeight * -6 +
+            //         fullRowCount * 2 +
+            //         rowTransitionCount * -4 +
+            //         columnTransitionCount * -9 +
+            //         numberOfHoles * -5 +
+            //         wellSums * -2
+            // }
+
+            //49598
+            // return landHeight * -5 +
+            //     fullRowCount * 2 +
+            //     rowTransitionCount * -4 +
+            //     columnTransitionCount * -9 +
+            //     numberOfHoles * -5 +
+            //     wellSums * -2
+
+            //62036
+            // return landHeight * -6 +
+            //     fullRowCount * 2 +
+            //     rowTransitionCount * -4 +
+            //     columnTransitionCount * -9 +
+            //     numberOfHoles * -5 +
+            //     wellSums * -2
+
+            // if (shapeIndex === 0 || shapeIndex === 1|| shapeIndex === 2) {
+            //     return landHeight * -6 +
+            //         fullRowCount * 2 +
+            //         rowTransitionCount * -4 +
+            //         columnTransitionCount * -9 +
+            //         numberOfHoles * -3 +
+            //         wellSums * -2
+            // }
+
+
+            // if (shapeIndex === 5 || shapeIndex === 6) {
+            //     return landHeight * -9 +
+            //         fullRowCount * 2 +
+            //         rowTransitionCount * -9 +
+            //         columnTransitionCount * -9 +
+            //         numberOfHoles * -9 +
+            //         wellSums * -5
+            // }
+
+            return landHeight * -6 +
+                fullRowCount * 2 +
+                rowTransitionCount * -4 +
+                columnTransitionCount * -9 +
+                numberOfHoles * -5 +
+                wellSums * -2
+
+
+            // if(numberOfTilesBeforeEliminate>100){
+            //     return landHeight * -4.500158825082766 +
+            //         fullRowCount * 3.4181268101392694 +
+            //         rowTransitionCount * -3.2178882868487753 +
+            //         columnTransitionCount * -9.348695305445199 +
+            //         numberOfHoles * -7.899265427351652 +
+            //         wellSums * -3.3855972247263626
+            // }
+            //
+            // return numberOfTilesBeforeEliminate * 2 +
+            //     landHeight * -3 +
+            //     fullRowCount * 5 +
+            //     rowTransitionCount * -6 +
+            //     columnTransitionCount * -6 +
+            //     numberOfHoles * -5 +
+            //     wellSums * -3
+
+            // return numberOfTilesBeforeEliminate +
+            //     numberOfHoles +
+            //     fullRowCount +
+            //     wellSums +
+            //     rowTransitionCount +
+            //     columnTransitionCount
+        }
+
         //检验这一列能否容下这个方块
         posValid = (columnIndex, shapeIndex, stateIndex) => {
             let result = true
@@ -58,6 +311,7 @@
         //下落并返回一个最终形态
         drop = (grid, columnIndex, shapeIndex, stateIndex) => {
             let latestGrid = null
+            let landHeight = gridConfig.row
             for (let r = 0; r < gridConfig.row; r++) {
                 let emptyCount = 0, invalidCount = 0, tempGrid = this.cloneGrid(grid)
                 shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
@@ -74,23 +328,36 @@
                     if (emptyCount === 4) {
                         //可以放下
                         latestGrid = this.cloneGrid(grid)
+                        let minY = 999, maxY = -999
                         shapes[shapeIndex][stateIndex].forEach(([x, y]) => {
-                            latestGrid[y + r] && (latestGrid[y + r][x + columnIndex] = true)
+                            if (latestGrid[y + r]) {
+                                latestGrid[y + r][x + columnIndex] = true
+                            }
+
+                            if (y < minY) {
+                                minY = y
+                            }
+                            if (y > maxY) {
+                                maxY = y
+                            }
                         })
+
+                        landHeight = (gridConfig.row - 1 - r) + maxY - (maxY - minY + 1) / 2
                     } else {
                         //搜寻结束
                         break
                     }
                 }
             }
-            return latestGrid
+            return {latestGrid, landHeight}
         }
+
         getBooleanGrid = (oldGrid) => {
             let newGrid = []
             oldGrid.forEach(row => {
                 let newRow = []
-                row.forEach(cell => {
-                    newRow.push(cell.length > 0)
+                row.forEach(tile => {
+                    newRow.push(tile.length > 0)
                 })
                 newGrid.push(newRow)
             })
@@ -106,7 +373,7 @@
         printGrid = (grid) => {
             let str = ""
             grid.forEach(row => {
-                row.forEach(cell => str += cell ? "■" : "□")
+                row.forEach(tile => str += tile ? "■" : "□")
                 str += "\n"
             })
             console.log(str)
@@ -115,3 +382,5 @@
 
     global.Intelligence = Intelligence;
 })(window);
+
+window.ai = new window.Intelligence()

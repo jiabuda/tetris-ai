@@ -129,11 +129,11 @@
          * @return {object}
          */
         getShapeInfo(randomNum, brickCount) {
-            // const { shapes, colors } = this;
+            const {shapes, colors} = this;
 
             const weightIndex = randomNum % 29; // 对形状的概率有一定要求：限制每种砖块的出现概率可以让游戏变得更有挑战性
-            const stateIndex = 0; // 形态概率要求不高，随机即可
-            const colorIndex = 0; // 颜色概率要求不高，随机即可
+            const stateIndex = brickCount % shapes[0].length; // 形态概率要求不高，随机即可
+            const colorIndex = brickCount % colors.length; // 颜色概率要求不高，随机即可
             let shapeIndex = 0;
 
             // const testShapeIndex = Math.floor(brickCount / 4);
@@ -534,10 +534,12 @@
             }
 
             //在这里可以触发AI计算
-            let intelligence = new global.Intelligence()
+            // let intelligence = new global.Intelligence()
             //获取棋盘、方块
-
-            intelligence.calc(this.grids.slice(0), this.shapeIndex)
+            console.log(this.brickCount)
+            window.ai.calc(this.grids, this.shapeIndex, this.stateIndex)
+            // let {bestC, bestS} = intelligence.calc(this.grids, this.shapeIndex, this.stateIndex)
+            // intelligence.calc(this.grids, this.shapeIndex, this.stateIndex)
 
 
             return {isValid, brickCount: this.brickCount};
