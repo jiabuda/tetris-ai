@@ -130,7 +130,10 @@
                     //     bestC = c
                     //     bestS = s
                     // }
-                    grids[s * 10 + c] = {dropGrid, landHeight}
+
+                    if (dropGrid) {
+                        grids[s * 10 + c] = {dropGrid, landHeight}
+                    }
                 } else {
                     grids[s * 10 + c] = undefined
                 }
@@ -388,8 +391,8 @@
             //     numberOfHoles * -5 +
             //     wellSums * -2
 
-            if (numberOfTilesBeforeEliminate <= 65) {
-                return numberOfTilesBeforeEliminate * 20 +
+            if (numberOfTilesBeforeEliminate <= 50) {
+                return numberOfTilesBeforeEliminate * 15 +
                     landHeight * -10 +
                     fullRowCount * -15 +
                     rowTransitionCount * -5 +
@@ -398,31 +401,32 @@
                     wellSums * -8
             }
 
-            if (numberOfTilesBeforeEliminate > 65 && numberOfTilesBeforeEliminate <= 100) {
+            if (numberOfTilesBeforeEliminate > 50 && numberOfTilesBeforeEliminate <= 90) {
                 return numberOfTilesBeforeEliminate * -3 +
                     landHeight * -5 +
-                    fullRowCount * 10 +
+                    fullRowCount * 5 +
                     rowTransitionCount * -8 +
                     columnTransitionCount * -8 +
                     numberOfHoles * -5 +
-                    wellSums * -5
-            }
-
-            if (numberOfTilesBeforeEliminate > 100) {
-                return numberOfTilesBeforeEliminate * -8 +
-                    fullRowCount * 8 +
-                    rowTransitionCount * -4 +
-                    columnTransitionCount * -4 +
-                    numberOfHoles * -8 +
                     wellSums * -8
             }
 
-            return numberOfTilesBeforeEliminate * -2 +
-                fullRowCount * 3 +
-                rowTransitionCount * -3 +
-                columnTransitionCount * -3 +
-                numberOfHoles * -3 +
-                wellSums * -3
+            // if (numberOfTilesBeforeEliminate > 100) {
+            return numberOfTilesBeforeEliminate * -8 +
+                landHeight * -5 +
+                fullRowCount * 5 +
+                rowTransitionCount * -8 +
+                columnTransitionCount * -8 +
+                numberOfHoles * -5 +
+                wellSums * -8
+            // }
+
+            // return numberOfTilesBeforeEliminate * -2 +
+            //     fullRowCount * 3 +
+            //     rowTransitionCount * -3 +
+            //     columnTransitionCount * -3 +
+            //     numberOfHoles * -3 +
+            //     wellSums * -3
 
             // if (shapeIndex === 0 || shapeIndex === 1|| shapeIndex === 2) {
             //     return landHeight * -6 +
