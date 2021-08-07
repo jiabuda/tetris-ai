@@ -142,6 +142,27 @@
             return grids
         }
 
+        const tilesAndEliminateLines = (grid) => {
+            let fullRowList = []
+            let numberOfTilesBeforeEliminate = 0
+
+
+            for (let r = 0; r < gridConfig.row; r++) {
+                let isRowFull = true
+                for (let c = 0; c < gridConfig.col; c++) {
+                    //是否满行
+                    isRowFull = isRowFull && grid[r][c]
+                    if (grid[r][c]) {
+                        //方块数加1
+                        numberOfTilesBeforeEliminate++
+                    }
+                }
+            }
+
+            return {numberOfTilesBeforeEliminate, fullRowCount: fullRowList.length}
+        }
+
+
         class Intelligence {
 
             calc = (grid, brickCount) => {
@@ -163,12 +184,27 @@
 
                 for (let index in oneStepGrid) {
                     if (oneStepGrid[index]) {
-                        let oneStepMark = this.analyseGrid(oneStepGrid[index].dropGrid, oneStepGrid[index].landHeight)
+//                     let {numberOfTilesBeforeEliminate, fullRowCount }=tilesAndEliminateLines(oneStepGrid[index].dropGrid)
+
+//                     if(numberOfTilesBeforeEliminate<60 ){
+//                         let mark = this.analyseGrid(oneStepGrid[index].dropGrid, oneStepGrid[index].landHeight)
+//                         if (mark > maxMark) {
+//                             maxMark = mark
+//                             bestS = index / 10 | 0
+//                             bestC = index % 10
+//                         }
+//                     }else{
+// // let oneStepMark = this.analyseGrid(oneStepGrid[index].dropGrid, oneStepGrid[index].landHeight)
                         //又得到40个网格
                         let twoStepGrid = generateGrids(oneStepGrid[index].dropGrid, shapeIndex2, stateIndex2)
 
                         for (let index2 in twoStepGrid) {
                             if (twoStepGrid[index2]) {
+                                // let {numberOfTilesBeforeEliminate, fullRowCount }=tilesAndEliminateLines(twoStepGrid[index2].dropGrid)
+
+                                // if(numberOfTilesBeforeEliminate<20 && fullRowCount>=0){
+                                //     continue
+                                // }
                                 let mark = this.analyseGrid(twoStepGrid[index2].dropGrid, twoStepGrid[index2].landHeight)
                                 if (mark > maxMark) {
                                     maxMark = mark
@@ -201,6 +237,9 @@
                             }
 
                         }
+                        // }
+
+
                     }
                 }
 
@@ -434,7 +473,7 @@
                 //     numberOfHoles * -5 +
                 //     wellSums * -2
 
-                if (numberOfTilesBeforeEliminate <= 80) {
+                if (numberOfTilesBeforeEliminate <= 82) {
                     return landHeight * -4 +
                         rowTransitionCount * -5 +
                         fullRowSum * -25 +
